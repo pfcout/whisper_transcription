@@ -50,13 +50,4 @@ Currently, the pipeline works but with **several limitations**:
 
 ---
 
-## 🚀 How to Run
 
-```bash
-# Example run
-python transcribe_diarizado_txt.py \
-  --input_dir "../bd_ligagacoes_filtradas" \
-  --output_dir "../arquivos_transcritos" \
-  --dict_path "../consultas_do_codigo/dicionario_televendas.txt" \
-  --model "medium" \
-  --diar_model "pyannote/speaker-diarization-3.1"
