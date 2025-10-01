@@ -1,205 +1,62 @@
-# 📝 Transcrição + Diarização de Áudios em Português (Whisper + Pyannote)
+# 🎙️ Transcribe & Diarize Pipeline
 
-Ferramenta open-source para **transcrever chamadas** e **separar falantes** (diarização) em **PT-BR**, usando **Whisper** e **Pyannote.audio**.  
-Pensada para cenários de **televendas/atendimento**, mas útil em qualquer diálogo com 2+ pessoas.
-
----
-
-## ✅ O que já funciona
-
-- **Transcrição** com Whisper (`tiny` → `large-v3`).
-- **Diarização** com Pyannote (`speaker-diarization-3.1`), com:
-  - `num_speakers=2` **forçado** (ótimo para ligações 1-a-1).
-  - **fallback**: se o modelo ainda retornar só um falante, **alternamos** os turns entre `SPEAKER_00` e `SPEAKER_01` (melhora a legibilidade).
-- **Alinhamento por overlap** (segmentos do Whisper são atribuídos ao turno com interseção temporal).
-- **Limpeza de repetições** (regex avançada):
-  - remove **frases longas duplicadas** e **alternâncias A-B-A-B**,
-  - limpa **palavras/bigramas** repetidos (loops).
-- **Dicionário de correções fuzzy** (fuzzywuzzy + Levenshtein):
-  - corrige “erros de ASR” mesmo com **grafia parecida** (ex.: “contestão” → “cotação”; “horto” → “orto”).
-- **Repontuação** automática (deepmultilingualpunctuation).
-- **Saída .txt estruturada**:
-  ```
-  NOME_DO_ARQUIVO
-
-  00:00:12 - SPEAKER_00
-  Bom dia, tudo bem?
-
-  00:00:17 - SPEAKER_01
-  Tudo sim. Pode falar.
-  ```
+This project provides an **automatic transcription and speaker diarization pipeline** for telesales calls.  
+It combines **OpenAI Whisper** for speech-to-text transcription and **PyAnnote** for speaker diarization, with additional post-processing for text cleaning and domain-specific dictionary correction.
 
 ---
 
-## 🗂 Estrutura sugerida do repo
+## ⚙️ Project Overview
 
-```
-Projeto-Transcricao/
-├─ scripts/
-│  └─ transcribe_diarizado_txt.py
-├─ consultas_do_codigo/
-│  └─ dicionario_televendas.txt     # “origem=correcao” (uma por linha)
-├─ bd_ligacoes_filtradas/           # (vazio no Git – não subir áudios reais)
-│  └─ README.md                     # explique como colocar .wav de teste
-├─ arquivos_transcritos/            # saídas .txt (gitignore)
-├─ requirements.txt
-├─ .env.example                     # HF_TOKEN=seu_token
-├─ .gitignore
-└─ README.md
-```
+The script `transcribe_diarizado_txt.py` is designed to:
+- Load `.wav` audio files from a given input folder.
+- Apply **speaker diarization** (identify who is speaking and when).
+- Transcribe the audio into **Portuguese text** using Whisper.
+- Apply **text normalization**:
+  - Remove word/phrase repetitions.
+  - Correct terms with a fuzzy dictionary (customizable domain-specific replacements).
+- Save the diarized transcripts into `.txt` files for further analysis.
 
-**.gitignore** (sugestão):
-```
-bd_ligacoes_filtradas/
-arquivos_transcritos/
-*.wav
-*.mp3
-.cache/
-__pycache__/
-.env
-```
+### 🔧 Built With
+- **Python 3.12+**
+- **Whisper** (OpenAI)
+- **PyAnnote.audio** (speaker diarization v3.1)
+- **FuzzyWuzzy** (approximate string matching)
+- **Torch & Torchaudio**
+- **Regex, JSON, argparse, pathlib**
 
 ---
 
-## 🔧 Instalação
+## 📊 Expected Performance
 
-### 1) Python e pacotes
+The pipeline was expected to:
+- Accurately transcribe telesales calls in Portuguese.
+- Distinguish between two speakers (seller vs. client).
+- Correct industry-specific vocabulary automatically via dictionary.
+- Deliver clean, diarized transcripts with minimal errors.
+- Process large batches of `.wav` files without interruptions.
+
+---
+
+## ⚠️ Current Performance
+
+Currently, the pipeline works but with **several limitations**:
+- **Diarization model** sometimes detects only one speaker, requiring a fallback alternation method (artificially switching between two speakers).
+- **Dictionary corrections** depend heavily on fuzzy thresholds and may introduce false positives or miss corrections.
+- **Repetitions cleanup** can remove too much or too little content depending on audio quality.
+- **Performance bottlenecks**:  
+  - Whisper transcription runs on **CPU by default**, which is slow for long audios.  
+  - PyAnnote diarization requires a valid HuggingFace token and is resource-intensive.
+- **Error handling**: when transcription or diarization fails, the script only logs the error but does not retry automatically.
+
+---
+
+## 🚀 How to Run
+
 ```bash
-python -m venv .venv
-# Ative o venv e depois:
-pip install -r requirements.txt
-```
-
-**requirements.txt (sugestão mínima):**
-```
-openai-whisper
-torch
-torchaudio
-pyannote.audio==3.3.2
-speechbrain==1.0.0
-transformers
-deepmultilingualpunctuation
-fuzzywuzzy
-python-Levenshtein
-python-dotenv
-huggingface_hub
-```
-
-> ⚠️ **FFmpeg** é necessário para o Whisper. Instale no sistema (Windows: choco/scoop ou binário oficial).
-
-### 2) Token do Hugging Face
-- Crie um **Access Token** no Hugging Face.
-- Aceite os termos dos modelos **pyannote/speaker-diarization-3.1** (e, se solicitado, **pyannote/segmentation-3.0**).
-- Crie um arquivo `.env` (use `.env.example` como base):
-  ```
-  HF_TOKEN=seu_token_aqui
-  ```
-
-### 3) Notas para Windows
-- Para evitar problemas de symlink do Speechbrain:
-  ```
-  set SPEECHBRAIN_LOCAL_STRATEGY=copy
-  ```
-- Warnings do `torchaudio._backend`/`transformers` são esperados e **não** bloqueiam a execução.
-
----
-
-## ▶️ Como rodar
-
-### Modo rápido (padrões do script)
-Dentro de `scripts/`:
-```bash
-python transcribe_diarizado_txt.py
-```
-
-### Modo avançado (definindo caminhos/modelos)
-```bash
-python scripts/transcribe_diarizado_txt.py   --input_dir bd_ligagacoes_filtradas   --output_dir arquivos_transcritos   --dict_path consultas_do_codigo/dicionario_televendas.txt   --model medium   --diar_model pyannote/speaker-diarization-3.1
-```
-
----
-
-## 🧠 Como funciona (resumo técnico)
-
-1. **Diarização** (`pyannote`):
-   - `Pipeline.from_pretrained(...)` com `use_auth_token=HF_TOKEN`.
-   - Chamada com `num_speakers=2`.
-   - *Fallback*: se só um falante for detectado, alternamos os turns (`SPEAKER_00` ⇄ `SPEAKER_01`).
-
-2. **Transcrição** (Whisper):
-   - `whisper.transcribe(..., language="pt")`.
-   - Segmentos são **mapeados por overlap** para cada turno.
-
-3. **Pós-processamento**:
-   - **Dicionário fuzzy**: corrige palavras por similaridade (threshold padrão 80).
-   - **Repontuação** automática.
-   - **Limpeza de repetições**: frases longas, alternâncias, palavras repetidas.
-
----
-
-## 📘 Dicionário de correções (fuzzy)
-
-Arquivo: `consultas_do_codigo/dicionario_televendas.txt`  
-Formato: **uma regra por linha** (`origem=correcao`), por exemplo:
-```
-contestão=cotação
-torque=porque
-horto=orto
-palato=barato
-dente=dentista
-```
-
----
-
-## 🧪 Exemplo de saída
-
-```
-audio_spin2
-
-00:00:08 - SPEAKER_00
-Bom dia, Rosana. Tudo bem?
-
-00:00:12 - SPEAKER_01
-Tudo sim. Quem fala?
-
-00:00:15 - SPEAKER_00
-Sou da OrthoMundi. Você é a decisora principal para materiais de brackets?
-```
-
----
-
-## ⚠️ Diferenças para VOOK.ai (e desafios)
-
-Apesar das melhorias, **ainda não atingimos** a qualidade de ferramentas como **VOOK.ai**:
-
-- **Diarização**: em áudios curtos/limpos ou com pouca pausa, o modelo pode **agrupar vozes**; por isso forçamos `num_speakers=2` e aplicamos **fallback de alternância** — ajuda, mas **não é perfeito**.
-- **Repetições/Alucinações** do Whisper: mitigamos com regex e dicionário fuzzy, porém **ruído, eco e sobreposição** ainda podem degradar.
-- **Refinamento semântico**: soluções comerciais usam **pipelines proprietários** e às vezes **curadoria humana**; nosso foco aqui é open-source e reproduzível.
-
-**Conclusão**: o projeto **gera TXT legível e útil** (principalmente para calls 1-a-1), mas ainda existe uma **lacuna de qualidade** frente a VOOK.ai — especialmente na **separação de falantes** em casos difíceis.
-
----
-
-## 🛠️ Contribua com o projeto! 🙌
-
-Buscamos ajuda nas frentes abaixo (abra uma **Issue** e/ou mande **PR**):
-
-- **Diarização**: heurísticas melhores (clusterização, VAD custom, “stitching” de turns).
-- **Anti-hallucination**: descartar segmentos com `avg_logprob` muito baixo / `no_speech_prob` alto.
-- **Repontuação**: avaliar alternativas (ex.: modelos específicos para PT-BR).
-- **Dicionário fuzzy**: ampliar termos de televendas/saúde (glossário).
-- **Benchmark**: scripts de comparação lado a lado com VOOK.ai.
-- **Performance**: otimizações para CPU e Windows.
-
----
-
-## 🛡️ Privacidade (LGPD)
-
-- **Não suba** gravações reais com dados pessoais.
-- Use áudios **sintéticos** ou anonimizados para demonstração.
-
----
-
-## 📄 Licença
-
-**MIT License** — livre para uso e colaboração.
+# Example run
+python transcribe_diarizado_txt.py \
+  --input_dir "../bd_ligagacoes_filtradas" \
+  --output_dir "../arquivos_transcritos" \
+  --dict_path "../consultas_do_codigo/dicionario_televendas.txt" \
+  --model "medium" \
+  --diar_model "pyannote/speaker-diarization-3.1"
